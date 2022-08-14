@@ -5,6 +5,12 @@ import pandas as pd
 
 
 def add_extra_columns(data: pd.DataFrame):
+    # - combine 'PublishedLineName' and 'DirectionRef' into a 
+    #   single categorical feature
+    to_combine = ['PublishedLineName', 'DirectionRef']
+    data[to_combine] = data[to_combine].astype(str)
+    data['BusLine_Direction'] = data['PublishedLineName'] + '_' + data['DirectionRef'].astype(str)
+
     # - date of record in format 'YYYY-MM-DD'
     data['Day'] = data['RecordedAtTime'].dt.date
 
@@ -19,7 +25,7 @@ def add_extra_columns(data: pd.DataFrame):
     # - difference in seconds between 'RecordedAtTime' and 'ScheduledArrivalTime'
     #   when 'ArrivalProximityText' == 'at stop'
     mask = data['ArrivalProximityText'] == 'at stop'
-    data['DelayAtStop'] = data[mask].apply(
+    data.loc[mask, 'DelayAtStop'] = data[mask].apply(
         lambda r: (r['RecordedAtTime'] - r['ScheduledArrivalTime']).total_seconds(),
         axis=1,
     )
@@ -59,29 +65,12 @@ def fix_datetime_columns(data: pd.DataFrame):
     ].apply(pd.to_datetime, infer_datetime_format=True)
 
 
-def load_data(
-    data_dir: Union[str, Path], months: list[int], pre_process=True, **kws
-) -> pd.DataFrame:
-
+def load_data(data_dir: Union[str, Path], months: list[int], **kwargs) -> pd.DataFrame:
     data = pd.DataFrame()
-    for file in [Path(data_dir) / f"mta_17{month:02d}.csv" for month in months]:
+    for file in [Path(data_dir) / f"mta_17{int(month):02d}.csv" for month in months]:
         # ignore lines with errors with on_bad_lines='skip'
         data = pd.concat(
-            [pd.read_csv(file, index_col=False, on_bad_lines='skip', **kws), data]
+            [pd.read_csv(file, index_col=False, on_bad_lines='skip', **kwargs), data]
         )
-
-    if pre_process:
-        # keep only rows with 'ArrivalProximityText' == 'at stop'
-        data = data[data['ArrivalProximityText'] == 'at stop'].reset_index(drop=True)
-
-        # fix datetime columns
-        fix_datetime_columns(data)
-        fix_scheduled_arrival_time_column(data)
-
-        # add extra columns, which will be useful for delay prediction
-        add_extra_columns(data)
-
-        # sort by 'RecordedAtTime'
-        data = data.sort_values(by=['RecordedAtTime']).reset_index(drop=True)
 
     return data

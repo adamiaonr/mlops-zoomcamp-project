@@ -8,6 +8,7 @@ pandas = "*"
 scikit-learn = "*"
 numpy = "*"
 matplotlib = "*"
+xgboost = "*"
 
 [dev-packages]
 jupyter = "*"
@@ -16,6 +17,8 @@ seaborn = "*"
 black = "*"
 autopep8 = "*"
 isort = "*"
+hyperopt = "*"
+mlflow = "*"
 
 [requires]
 python_version = "3.9"

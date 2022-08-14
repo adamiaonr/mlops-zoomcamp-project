@@ -1,23 +1,20 @@
 import os
 import argparse
-import numpy as np
-import xgboost as xgb
-import mlflow
-
 from pathlib import Path
-from hyperopt import fmin, tpe, hp, STATUS_OK, Trials
+
+import numpy as np
+import mlflow
+import xgboost as xgb
+from hyperopt import STATUS_OK, Trials, hp, tpe, fmin
 from hyperopt.pyll import scope
-from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
+from sklearn.ensemble import RandomForestRegressor
 
 from src.utils import load_pickle
 
 
 def train_random_forest_regressor(
-    X_train:np.ndarray, 
-    y_train:np.ndarray, 
-    X_val:np.ndarray, 
-    y_val:np.ndarray
+    X_train: np.ndarray, y_train: np.ndarray, X_val: np.ndarray, y_val: np.ndarray
 ):
     # enable mlflow sklearn autologging
     mlflow.sklearn.autolog()
@@ -28,9 +25,9 @@ def train_random_forest_regressor(
 
             rf = RandomForestRegressor(**params)
             rf.fit(X_train, y_train)
-            y_pred = rf.predict(X_val)            
+            y_pred = rf.predict(X_val)
             rmse = mean_squared_error(y_val, y_pred, squared=False)
-            
+
             mlflow.log_metric('rmse', rmse)
 
         return {'loss': rmse, 'status': STATUS_OK}
@@ -40,7 +37,7 @@ def train_random_forest_regressor(
         'n_estimators': scope.int(hp.quniform('n_estimators', 10, 50, 1)),
         'min_samples_split': scope.int(hp.quniform('min_samples_split', 2, 10, 1)),
         'min_samples_leaf': scope.int(hp.quniform('min_samples_leaf', 1, 4, 1)),
-        'random_state': 42
+        'random_state': 42,
     }
 
     rstate = np.random.default_rng(42)  # for reproducible results
@@ -50,15 +47,12 @@ def train_random_forest_regressor(
         algo=tpe.suggest,
         max_evals=10,
         trials=Trials(),
-        rstate=rstate
+        rstate=rstate,
     )
 
 
 def train_xgboost(
-    X_train:np.ndarray, 
-    y_train:np.ndarray, 
-    X_val:np.ndarray, 
-    y_val:np.ndarray
+    X_train: np.ndarray, y_train: np.ndarray, X_val: np.ndarray, y_val: np.ndarray
 ):
     # enable mlflow xgboost autologging
     mlflow.xgboost.autolog()
@@ -77,7 +71,7 @@ def train_xgboost(
                 dtrain=train_data,
                 num_boost_round=100,
                 evals=[(validation_data, 'validation')],
-                early_stopping_rounds=10
+                early_stopping_rounds=10,
             )
             y_pred = booster.predict(validation_data)
             rmse = mean_squared_error(y_val, y_pred, squared=False)
@@ -94,25 +88,20 @@ def train_xgboost(
         'reg_lambda': hp.loguniform('reg_lambda', -6, -1),
         'min_child_weight': hp.loguniform('min_child_weight', -1, 3),
         'objective': 'reg:squarederror',
-        'seed': 42
+        'seed': 42,
     }
 
     # run hyperopt optimization
-    best_result = fmin(
+    fmin(
         fn=objective,
         space=search_space,
         algo=tpe.suggest,
         max_evals=10,
-        trials=Trials()
+        trials=Trials(),
     )
 
 
-def train(
-    input_dir: str, 
-    output_dir: str,
-    mlflow_tracking_uri: str,
-    mlflow_experiment: str
-):
+def train(input_dir: str, mlflow_tracking_uri: str, mlflow_experiment: str):
     # initialize mlflow
     mlflow.set_tracking_uri(mlflow_tracking_uri)
     mlflow.set_experiment(mlflow_experiment)
@@ -138,21 +127,19 @@ if __name__ == '__main__':
     parser.add_argument(
         "--input_dir",
         help="location of 'featurized' NYC bus dataset train, validation and test splits",
-        required=True
-    )
-
-    parser.add_argument(
-        "--output_dir",
-        help="location where models will be saved",
-        required=False
+        required=True,
     )
 
     args = parser.parse_args()
 
     # expand script arguments with mlflow parameters
     train_args = vars(args) | {
-        'mlflow_tracking_uri' : os.getenv('MLFLOW_TRACKING_URI', 'http://127.0.0.1:5000'),
-        'mlflow_experiment' : os.getenv('MLFLOW_EXPERIMENT_NAME', 'nyc-bus-delay-predictor')
+        'mlflow_tracking_uri': os.getenv(
+            'MLFLOW_TRACKING_URI', 'http://127.0.0.1:5000'
+        ),
+        'mlflow_experiment': os.getenv(
+            'MLFLOW_EXPERIMENT_NAME', 'nyc-bus-delay-predictor'
+        ),
     }
 
     train(**train_args)

@@ -19,6 +19,8 @@ autopep8 = "*"
 isort = "*"
 hyperopt = "*"
 mlflow = "*"
+pylint = "*"
+pre-commit = "*"
 
 [requires]
 python_version = "3.9"

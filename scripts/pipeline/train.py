@@ -1,4 +1,5 @@
 import os
+import time
 import argparse
 from pathlib import Path
 
@@ -35,10 +36,15 @@ def train_random_forest_regressor(input_dir: str):
 
             rf = RandomForestRegressor(**params)
             rf.fit(X_train, y_train)
+
+            # measure inference time
+            inference_time = time.time()
             y_pred = rf.predict(X_val)
+            inference_time = time.time() - inference_time
             rmse = mean_squared_error(y_val, y_pred, squared=False)
 
             mlflow.log_metric('rmse', rmse)
+            mlflow.log_metric('inference_time', inference_time)
 
         return {'loss': rmse, 'status': STATUS_OK}
 
@@ -84,10 +90,15 @@ def train_xgboost(input_dir: str):
                 evals=[(validation_data, 'validation')],
                 early_stopping_rounds=10,
             )
+
+            # measure inference time
+            inference_time = time.time()
             y_pred = booster.predict(validation_data)
+            inference_time = time.time() - inference_time
             rmse = mean_squared_error(y_val, y_pred, squared=False)
 
             mlflow.log_metric('rmse', rmse)
+            mlflow.log_metric('inference_time', inference_time)
 
         return {'loss': rmse, 'status': STATUS_OK}
 

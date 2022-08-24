@@ -5,7 +5,7 @@ import pandas as pd
 from src.preprocessing import fix_scheduled_arrival_time_column
 
 
-class TestSound(unittest.TestCase):
+class TestPreprocessing(unittest.TestCase):
     def test_fix_scheduled_arrival_time_column(self):
         data = pd.DataFrame(
             {

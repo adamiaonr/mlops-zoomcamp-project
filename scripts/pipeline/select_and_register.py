@@ -126,7 +126,7 @@ def select_and_register(
     # extract hpo experiment
     hpo_experiment = client.get_experiment_by_name(mlflow_hpo_experiment)
 
-    # search top n runs according to root mean squared error
+    # search top n runs according to rmse
     runs = client.search_runs(
         experiment_ids=hpo_experiment.experiment_id,
         run_view_type=ViewType.ACTIVE_ONLY,

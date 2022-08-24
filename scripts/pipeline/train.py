@@ -13,11 +13,21 @@ from sklearn.ensemble import RandomForestRegressor
 from src.utils import load_pickle
 
 
-def train_random_forest_regressor(
-    X_train: np.ndarray, y_train: np.ndarray, X_val: np.ndarray, y_val: np.ndarray
-):
+def load_dataset_splits(input_dir: str) -> tuple[np.ndarray]:
+    input_dir = Path(input_dir)
+
+    X_train, y_train = load_pickle(input_dir / "train.pkl")
+    X_val, y_val = load_pickle(input_dir / "validation.pkl")
+
+    return X_train, y_train, X_val, y_val
+
+
+def train_random_forest_regressor(input_dir: str):
     # enable mlflow sklearn autologging
     mlflow.sklearn.autolog()
+
+    # load dataset splits : train and validation
+    X_train, y_train, X_val, y_val = load_dataset_splits(input_dir)
 
     def objective(params):
         with mlflow.start_run():
@@ -51,11 +61,12 @@ def train_random_forest_regressor(
     )
 
 
-def train_xgboost(
-    X_train: np.ndarray, y_train: np.ndarray, X_val: np.ndarray, y_val: np.ndarray
-):
+def train_xgboost(input_dir: str):
     # enable mlflow xgboost autologging
     mlflow.xgboost.autolog()
+
+    # load dataset splits : train and validation
+    X_train, y_train, X_val, y_val = load_dataset_splits(input_dir)
 
     # xgboost requires a conversion of input types
     train_data = xgb.DMatrix(X_train, label=y_train)
@@ -102,23 +113,15 @@ def train_xgboost(
 
 
 def train(input_dir: str, mlflow_tracking_uri: str, mlflow_experiment: str):
-    # initialize mlflow
+    # initialize mlflow : tracking uri and experiment name
     mlflow.set_tracking_uri(mlflow_tracking_uri)
     mlflow.set_experiment(mlflow_experiment)
 
-    print(f'mlflow tracking uri : {mlflow.get_tracking_uri()}')
-    print(f'mlflow experiments : {mlflow.list_experiments()}')
-
-    # load dataset splits
-    input_dir = Path(input_dir)
-    X_train, y_train = load_pickle(input_dir / "train.pkl")
-    X_val, y_val = load_pickle(input_dir / "validation.pkl")
-
     # train and evaluate xgboost model
-    train_xgboost(X_train, y_train, X_val, y_val)
+    train_xgboost(input_dir)
 
     # train and evaluate random forest regressor model
-    train_random_forest_regressor(X_train, y_train, X_val, y_val)
+    train_random_forest_regressor(input_dir)
 
 
 if __name__ == '__main__':
@@ -138,8 +141,9 @@ if __name__ == '__main__':
             'MLFLOW_TRACKING_URI', 'http://127.0.0.1:5000'
         ),
         'mlflow_experiment': os.getenv(
-            'MLFLOW_EXPERIMENT_NAME', 'nyc-bus-delay-predictor'
+            'MLFLOW_HPO_EXPERIMENT_NAME', 'nyc-bus-delay-predictor-hpo'
         ),
     }
 
+    # start training
     train(**train_args)

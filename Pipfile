@@ -10,6 +10,9 @@ numpy = "*"
 matplotlib = "*"
 xgboost = "*"
 boto3 = "*"
+mlflow = "*"
+hyperopt = "*"
+prefect = "==2.0b6"
 
 [dev-packages]
 jupyter = "*"
@@ -18,8 +21,6 @@ seaborn = "*"
 black = "*"
 autopep8 = "*"
 isort = "*"
-hyperopt = "*"
-mlflow = "*"
 pylint = "*"
 pre-commit = "*"
 

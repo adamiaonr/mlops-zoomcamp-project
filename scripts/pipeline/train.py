@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import argparse
 from pathlib import Path
@@ -118,7 +119,7 @@ def train_xgboost(input_dir: str):
         fn=objective,
         space=search_space,
         algo=tpe.suggest,
-        max_evals=10,
+        max_evals=5,
         trials=Trials(),
     )
 
@@ -158,3 +159,5 @@ if __name__ == '__main__':
 
     # start training
     train(**train_args)
+
+    sys.exit(0)

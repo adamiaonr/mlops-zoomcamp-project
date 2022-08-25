@@ -1,13 +1,18 @@
-import pandas as pd
-import numpy as np
 import argparse
-
-from sklearn.model_selection import train_test_split
-from sklearn.feature_extraction import DictVectorizer
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction import DictVectorizer
+
 from src.utils import dump_pickle
-from src.preprocessing import load_data, fix_datetime_columns, fix_scheduled_arrival_time_column, add_extra_columns
+from src.preprocessing import (
+    load_data,
+    add_extra_columns,
+    fix_datetime_columns,
+    fix_scheduled_arrival_time_column,
+)
 
 
 def featurize(
@@ -15,7 +20,7 @@ def featurize(
     dv: DictVectorizer,
     categorical: list[str],
     numerical: list[str],
-    fit_dv: bool = False
+    fit_dv: bool = False,
 ) -> tuple[np.ndarray, DictVectorizer]:
     feature_dicts = data[categorical + numerical].to_dict(orient='records')
 
@@ -45,13 +50,18 @@ def prepare(input_dir: str, output_dir: str, months: list[int], **kwargs):
     target = 'DelayAtStop'
 
     # drop nan values in required columns
-    data = data.dropna(subset=categorical + numerical + [target]).reset_index(drop = True)
+    data = data.dropna(subset=categorical + numerical + [target]).reset_index(drop=True)
 
     # split dataset into train, validation and test sets
     train_data, test_data = train_test_split(data, test_size=0.30)
     train_data, validation_data = train_test_split(train_data, test_size=0.20)
 
-    print(f"dataset split sizes :\n\ttrain : {len(train_data)}\n\tvalidation : {len(validation_data)}\n\ttest : {len(test_data)}")
+    print(
+        (
+            f"dataset split sizes :\n\ttrain : {len(train_data)}"
+            f"\n\tvalidation : {len(validation_data)}\n\ttest : {len(test_data)}"
+        )
+    )
 
     # featurize splits
     dv = DictVectorizer()
@@ -74,23 +84,24 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--input_dir",
-        help="location of 'raw' NYC bus dataset",
-        required=True
+        "--input_dir", help="location of 'raw' NYC bus dataset", required=True
     )
 
     parser.add_argument(
         "--output_dir",
         help="location where processed data will be saved",
-        required=True
+        required=True,
     )
-    
+
     parser.add_argument(
         "--months",
         nargs='+',
-        help="NYC bus dataset months to be used, separated by whitspaces, e.g. '--months 6 8' (default: [6, 8])",
+        help=(
+            "NYC bus dataset months to be used, separated by whitspaces, "
+            "e.g. '--months 6 8' (default: [6, 8])"
+        ),
         default=['6', '8'],
-        required=False
+        required=False,
     )
 
     args = parser.parse_args()

@@ -1,4 +1,5 @@
 import os
+import sys
 import argparse
 from pathlib import Path
 
@@ -110,13 +111,52 @@ TRAIN_AND_LOG_FUNC = {
 }
 
 
-def select_and_register(
+def register_model(
+    run: mlflow.entities.Run, mlflow_tracking_uri: str, model_name: str
+) -> bool:
+
+    # initialize mlflow : tracking uri
+    mlflow.set_tracking_uri(mlflow_tracking_uri)
+
+    client = MlflowClient()
+
+    # extract rmse of current production model
+    try:
+        production = client.get_latest_versions(model_name, ['Production'])
+    except mlflow.exceptions.RestException:
+        production = []
+
+    if production:
+        production_run = client.get_run(run_id=production[-1].run_id)
+        production_rmse = production_run.data.metrics['test_rmse']
+
+    # register and transition to 'Staging' if candidate model performs better than
+    # current production model or if no production model exists
+    if not production or run.data.metrics['test_rmse'] < production_rmse:
+        # registration
+        model_version = mlflow.register_model(
+            model_uri=f"runs:/{run.info.run_id}/model",
+            name=model_name,
+            tags=run.data.tags,
+        )
+        # transition to 'Staging'
+        client.transition_model_version_stage(
+            name=model_name, version=model_version.version, stage='Staging'
+        )
+
+        return True
+
+    return False
+
+
+def select_model(
     input_dir: str,
     number_top_runs: int,
     mlflow_tracking_uri: str,
     mlflow_hpo_experiment: str,
     mlflow_select_experiment: str,
-):
+) -> mlflow.entities.Run:
+
     # initialize mlflow : tracking uri and experiment name
     mlflow.set_tracking_uri(mlflow_tracking_uri)
     mlflow.set_experiment(mlflow_select_experiment)
@@ -147,10 +187,7 @@ def select_and_register(
         order_by=["metrics.test_rmse ASC"],
     )[0]
 
-    # register the best model
-    mlflow.register_model(
-        model_uri=f"runs:/{best_run.info.run_id}/model", name="nyc-bus-delay-predictor"
-    )
+    return best_run
 
 
 if __name__ == '__main__':
@@ -172,7 +209,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # expand script arguments with mlflow parameters
-    select_and_register_args = vars(args) | {
+    mlflow_args = {
         'mlflow_tracking_uri': os.getenv(
             'MLFLOW_TRACKING_URI', 'http://127.0.0.1:5000'
         ),
@@ -182,7 +219,25 @@ if __name__ == '__main__':
         'mlflow_select_experiment': os.getenv(
             'MLFLOW_SELECT_EXPERIMENT_NAME', 'nyc-bus-delay-predictor-select'
         ),
+        'mlflow_model_name': os.getenv('MLFLOW_MODEL_NAME', 'nyc-bus-delay-predictor'),
     }
 
-    # select best model and register it
-    select_and_register(**select_and_register_args)
+    # select best candidate model
+    mlflow_run = select_model(
+        args.input_dir,
+        args.number_top_runs,
+        mlflow_args['mlflow_tracking_uri'],
+        mlflow_args['mlflow_hpo_experiment'],
+        mlflow_args['mlflow_select_experiment'],
+    )
+
+    # register best candidate model model and transition to staging (if 'better' than current)
+    rc = register_model(
+        mlflow_run, mlflow_args['mlflow_tracking_uri'], mlflow_args['mlflow_model_name']
+    )
+
+    print(
+        f"model {mlflow_args['mlflow_model_name']} {'updated' if rc else 'not updated'}"
+    )
+
+    sys.exit(0)

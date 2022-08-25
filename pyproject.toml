@@ -12,6 +12,7 @@ disable = [
 line-length = 88
 target-version = ['py39']
 skip-string-normalization = true
+skip-magic-trailing-comma = true
 
 [tool.isort]
 multi_line_output = 3

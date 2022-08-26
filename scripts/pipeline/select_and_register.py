@@ -1,42 +1,31 @@
+import argparse
 import os
 import sys
-import argparse
-from pathlib import Path
+import time
 
-import numpy as np
 import mlflow
 import xgboost as xgb
 from hyperopt import hp, space_eval
 from hyperopt.pyll import scope
 from mlflow.entities import ViewType
 from mlflow.tracking import MlflowClient
-from sklearn.metrics import mean_squared_error
+from prefect import flow, task
+from prefect.task_runners import SequentialTaskRunner
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error
 
-from src.utils import load_pickle
-
-
-def load_dataset_splits(input_dir: str) -> tuple[np.ndarray]:
-    input_dir = Path(input_dir)
-
-    X_train, y_train = load_pickle(input_dir / "train.pkl")
-    X_val, y_val = load_pickle(input_dir / "validation.pkl")
-    X_test, y_test = load_pickle(input_dir / "test.pkl")
-
-    return X_train, y_train, X_val, y_val, X_test, y_test
+from utils import FeaturizedData, load_featurized_data
 
 
-def train_and_log_xgboost(input_dir: str, params):
+@task
+def train_and_log_xgboost(fd: FeaturizedData, params):
     # enable mlflow xgboost autologging
     mlflow.xgboost.autolog()
 
-    # load dataset splits
-    X_train, y_train, X_val, y_val, X_test, y_test = load_dataset_splits(input_dir)
-
     # xgboost requires a conversion of input types
-    train_data = xgb.DMatrix(X_train, label=y_train)
-    validation_data = xgb.DMatrix(X_val, label=y_val)
-    test_data = xgb.DMatrix(X_test, label=y_test)
+    train_data = xgb.DMatrix(fd.X_train, label=fd.y_train)
+    validation_data = xgb.DMatrix(fd.X_val, label=fd.y_val)
+    test_data = xgb.DMatrix(fd.X_test, label=fd.y_test)
 
     # search space used for xgboost regressor models
     search_space = {
@@ -61,24 +50,25 @@ def train_and_log_xgboost(input_dir: str, params):
         )
 
         # log validation error
-        val_rmse = mean_squared_error(
-            y_val, booster.predict(validation_data), squared=False
-        )
+        inference_time = time.time()
+        y_pred = booster.predict(validation_data)
+        inference_time = time.time() - inference_time
+
+        val_rmse = mean_squared_error(fd.y_val, y_pred, squared=False)
         mlflow.log_metric('validation_rmse', val_rmse)
+        mlflow.log_metric('inference_time', inference_time)
 
         # log test error
-        test_rmse = mean_squared_error(
-            y_test, booster.predict(test_data), squared=False
-        )
+        y_pred = booster.predict(test_data)
+
+        test_rmse = mean_squared_error(fd.y_test, y_pred, squared=False)
         mlflow.log_metric('test_rmse', test_rmse)
 
 
-def train_and_log_train_random_forest_regressor(input_dir: str, params):
+@task
+def train_and_log_train_random_forest_regressor(fd: FeaturizedData, params):
     # enable mlflow xgboost autologging
     mlflow.sklearn.autolog()
-
-    # load dataset splits
-    X_train, y_train, X_val, y_val, X_test, y_test = load_dataset_splits(input_dir)
 
     # search space used for sklearn regressor models
     search_space = {
@@ -94,14 +84,21 @@ def train_and_log_train_random_forest_regressor(input_dir: str, params):
 
         params = space_eval(search_space, params)
         rf = RandomForestRegressor(**params)
-        rf.fit(X_train, y_train)
+        rf.fit(fd.X_train, fd.y_train)
 
         # log validation error
-        val_rmse = mean_squared_error(y_val, rf.predict(X_val), squared=False)
+        inference_time = time.time()
+        y_pred = rf.predict(fd.X_val)
+        inference_time = time.time() - inference_time
+
+        val_rmse = mean_squared_error(fd.y_val, y_pred, squared=False)
         mlflow.log_metric('validation_rmse', val_rmse)
+        mlflow.log_metric('inference_time', inference_time)
 
         # log test error
-        test_rmse = mean_squared_error(y_test, rf.predict(X_test), squared=False)
+        y_pred = rf.predict(fd.X_test)
+
+        test_rmse = mean_squared_error(fd.y_test, y_pred, squared=False)
         mlflow.log_metric('test_rmse', test_rmse)
 
 
@@ -111,6 +108,49 @@ TRAIN_AND_LOG_FUNC = {
 }
 
 
+@task
+def select_model(
+    fd: FeaturizedData,
+    number_top_runs: int,
+    mlflow_tracking_uri: str,
+    mlflow_hpo_experiment: str,
+    mlflow_select_experiment: str,
+) -> mlflow.entities.Run:
+
+    # initialize mlflow : tracking uri and experiment name
+    mlflow.set_tracking_uri(mlflow_tracking_uri)
+    mlflow.set_experiment(mlflow_select_experiment)
+
+    client = MlflowClient()
+
+    # extract hpo experiment
+    hpo_experiment = client.get_experiment_by_name(mlflow_hpo_experiment)
+
+    # search top n runs according to rmse
+    runs = client.search_runs(
+        experiment_ids=hpo_experiment.experiment_id,
+        run_view_type=ViewType.ACTIVE_ONLY,
+        max_results=number_top_runs,
+        order_by=["metrics.rmse ASC"],
+    )
+
+    # train, validate and test using parameters of top runs
+    for run in runs:
+        TRAIN_AND_LOG_FUNC[run.data.tags['model']](fd, run.data.params)
+
+    # select model with lowest test RMSE
+    select_experiment = client.get_experiment_by_name(mlflow_select_experiment)
+    best_run = client.search_runs(
+        experiment_ids=select_experiment.experiment_id,
+        run_view_type=ViewType.ACTIVE_ONLY,
+        max_results=1,
+        order_by=["metrics.test_rmse ASC"],
+    )[0]
+
+    return best_run
+
+
+@task
 def register_model(
     run: mlflow.entities.Run, mlflow_tracking_uri: str, model_name: str
 ) -> bool:
@@ -149,45 +189,31 @@ def register_model(
     return False
 
 
-def select_model(
-    input_dir: str,
-    number_top_runs: int,
-    mlflow_tracking_uri: str,
-    mlflow_hpo_experiment: str,
-    mlflow_select_experiment: str,
-) -> mlflow.entities.Run:
+@flow(task_runner=SequentialTaskRunner())
+def select_and_register(
+    input_dir: str, number_top_runs: int, mlflow_params: dict
+) -> bool:
 
-    # initialize mlflow : tracking uri and experiment name
-    mlflow.set_tracking_uri(mlflow_tracking_uri)
-    mlflow.set_experiment(mlflow_select_experiment)
+    # load featurized data
+    featurized_data = load_featurized_data(input_dir)
 
-    client = MlflowClient()
-
-    # extract hpo experiment
-    hpo_experiment = client.get_experiment_by_name(mlflow_hpo_experiment)
-
-    # search top n runs according to rmse
-    runs = client.search_runs(
-        experiment_ids=hpo_experiment.experiment_id,
-        run_view_type=ViewType.ACTIVE_ONLY,
-        max_results=number_top_runs,
-        order_by=["metrics.rmse ASC"],
+    # select best candidate model
+    mlflow_run = select_model(
+        featurized_data,
+        number_top_runs,
+        mlflow_params['mlflow_tracking_uri'],
+        mlflow_params['mlflow_hpo_experiment'],
+        mlflow_params['mlflow_select_experiment'],
     )
 
-    # train, validate and test using parameters of top runs
-    for run in runs:
-        TRAIN_AND_LOG_FUNC[run.data.tags['model']](input_dir, run.data.params)
+    # register best candidate model model and transition to staging (if 'better' than current)
+    res = register_model(
+        mlflow_run,
+        mlflow_params['mlflow_tracking_uri'],
+        mlflow_params['mlflow_model_name'],
+    )
 
-    # select model with lowest test RMSE
-    select_experiment = client.get_experiment_by_name(mlflow_select_experiment)
-    best_run = client.search_runs(
-        experiment_ids=select_experiment.experiment_id,
-        run_view_type=ViewType.ACTIVE_ONLY,
-        max_results=1,
-        order_by=["metrics.test_rmse ASC"],
-    )[0]
-
-    return best_run
+    return res
 
 
 if __name__ == '__main__':
@@ -222,19 +248,7 @@ if __name__ == '__main__':
         'mlflow_model_name': os.getenv('MLFLOW_MODEL_NAME', 'nyc-bus-delay-predictor'),
     }
 
-    # select best candidate model
-    mlflow_run = select_model(
-        args.input_dir,
-        args.number_top_runs,
-        mlflow_args['mlflow_tracking_uri'],
-        mlflow_args['mlflow_hpo_experiment'],
-        mlflow_args['mlflow_select_experiment'],
-    )
-
-    # register best candidate model model and transition to staging (if 'better' than current)
-    rc = register_model(
-        mlflow_run, mlflow_args['mlflow_tracking_uri'], mlflow_args['mlflow_model_name']
-    )
+    rc = select_and_register(args.input_dir, args.number_top_runs, mlflow_args)
 
     print(
         f"model {mlflow_args['mlflow_model_name']} {'updated' if rc else 'not updated'}"

@@ -1,48 +1,38 @@
+import argparse
 import os
 import sys
 import time
-import argparse
-from pathlib import Path
 
-import numpy as np
 import mlflow
+import numpy as np
 import xgboost as xgb
-from hyperopt import STATUS_OK, Trials, hp, tpe, fmin
+from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
 from hyperopt.pyll import scope
-from sklearn.metrics import mean_squared_error
+from prefect import flow, task
+from prefect.task_runners import SequentialTaskRunner
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error
 
-from src.utils import load_pickle
-
-
-def load_dataset_splits(input_dir: str) -> tuple[np.ndarray]:
-    input_dir = Path(input_dir)
-
-    X_train, y_train = load_pickle(input_dir / "train.pkl")
-    X_val, y_val = load_pickle(input_dir / "validation.pkl")
-
-    return X_train, y_train, X_val, y_val
+from utils import FeaturizedData, load_featurized_data
 
 
-def train_random_forest_regressor(input_dir: str):
+@task
+def train_random_forest_regressor(fd: FeaturizedData):
     # enable mlflow sklearn autologging
     mlflow.sklearn.autolog()
-
-    # load dataset splits : train and validation
-    X_train, y_train, X_val, y_val = load_dataset_splits(input_dir)
 
     def objective(params):
         with mlflow.start_run():
             mlflow.set_tag('model', 'random-forest-regressor')
 
             rf = RandomForestRegressor(**params)
-            rf.fit(X_train, y_train)
+            rf.fit(fd.X_train, fd.y_train)
 
             # measure inference time
             inference_time = time.time()
-            y_pred = rf.predict(X_val)
+            y_pred = rf.predict(fd.X_val)
             inference_time = time.time() - inference_time
-            rmse = mean_squared_error(y_val, y_pred, squared=False)
+            rmse = mean_squared_error(fd.y_val, y_pred, squared=False)
 
             mlflow.log_metric('rmse', rmse)
             mlflow.log_metric('inference_time', inference_time)
@@ -68,16 +58,14 @@ def train_random_forest_regressor(input_dir: str):
     )
 
 
-def train_xgboost(input_dir: str):
+@task
+def train_xgboost(fd: FeaturizedData):
     # enable mlflow xgboost autologging
     mlflow.xgboost.autolog()
 
-    # load dataset splits : train and validation
-    X_train, y_train, X_val, y_val = load_dataset_splits(input_dir)
-
     # xgboost requires a conversion of input types
-    train_data = xgb.DMatrix(X_train, label=y_train)
-    validation_data = xgb.DMatrix(X_val, label=y_val)
+    train_data = xgb.DMatrix(fd.X_train, label=fd.y_train)
+    validation_data = xgb.DMatrix(fd.X_val, label=fd.y_val)
 
     # objective function to be used by hyperopt
     def objective(params):
@@ -96,7 +84,7 @@ def train_xgboost(input_dir: str):
             inference_time = time.time()
             y_pred = booster.predict(validation_data)
             inference_time = time.time() - inference_time
-            rmse = mean_squared_error(y_val, y_pred, squared=False)
+            rmse = mean_squared_error(fd.y_val, y_pred, squared=False)
 
             mlflow.log_metric('rmse', rmse)
             mlflow.log_metric('inference_time', inference_time)
@@ -124,16 +112,20 @@ def train_xgboost(input_dir: str):
     )
 
 
+@flow(task_runner=SequentialTaskRunner())
 def train(input_dir: str, mlflow_tracking_uri: str, mlflow_experiment: str):
     # initialize mlflow : tracking uri and experiment name
     mlflow.set_tracking_uri(mlflow_tracking_uri)
     mlflow.set_experiment(mlflow_experiment)
 
+    # load featurized data
+    featurized_data = load_featurized_data(input_dir)
+
     # train and evaluate xgboost model
-    train_xgboost(input_dir)
+    train_xgboost(featurized_data)
 
     # train and evaluate random forest regressor model
-    train_random_forest_regressor(input_dir)
+    train_random_forest_regressor(featurized_data)
 
 
 if __name__ == '__main__':

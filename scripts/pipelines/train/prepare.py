@@ -1,15 +1,15 @@
+import argparse
 import os
 import sys
-import argparse
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from kaggle.api.kaggle_api_extended import KaggleApi  # pylint: disable-msg=E0611
 from prefect import flow, task
 from prefect.task_runners import SequentialTaskRunner
-from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction import DictVectorizer
-from kaggle.api.kaggle_api_extended import KaggleApi  # pylint: disable-msg=E0611
+from sklearn.model_selection import train_test_split
 
 from src import preprocessing
 from utils import FeaturizedData, save_featurized_data

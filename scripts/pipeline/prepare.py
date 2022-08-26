@@ -1,7 +1,7 @@
+import os
 import sys
 import argparse
 from pathlib import Path
-from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -9,20 +9,24 @@ from prefect import flow, task
 from prefect.task_runners import SequentialTaskRunner
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction import DictVectorizer
+from kaggle.api.kaggle_api_extended import KaggleApi  # pylint: disable-msg=E0611
 
 from src import preprocessing
-from src.utils import dump_pickle
+from utils import FeaturizedData, save_featurized_data
 
 
-@dataclass
-class FeaturizedData:
-    dv: DictVectorizer
-    X_train: np.ndarray
-    y_train: np.ndarray
-    X_val: np.ndarray
-    y_val: np.ndarray
-    X_test: np.ndarray
-    y_test: np.ndarray
+@task(retries=3)
+def download_dataset(kaggle_dataset_id: str, output_dir: str):
+    # do not download if files already exist
+    if not list(Path(output_dir).glob('mta_17*.csv')):
+        # create kaggle API object and authenticate (assumes ~/.kaggle exists)
+        api = KaggleApi()
+        api.authenticate()
+
+        # download dataset from kaggle
+        api.dataset_download_files(
+            kaggle_dataset_id, path=Path(output_dir), force=False, unzip=True
+        )
 
 
 @task
@@ -99,26 +103,15 @@ def featurize(data: pd.DataFrame) -> FeaturizedData:
     )
 
 
-@task
-def save_featurized_data(
-    output_dir: str,
-    fd: FeaturizedData,
-):
-    # save dictvectorizer and dataset splits
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    dump_pickle(fd.dv, output_dir / "dv.pkl")
-    dump_pickle((fd.X_train, fd.y_train), output_dir / "train.pkl")
-    dump_pickle((fd.X_val, fd.y_val), output_dir / "validation.pkl")
-    dump_pickle((fd.X_test, fd.y_test), output_dir / "test.pkl")
-
-
 @flow(task_runner=SequentialTaskRunner())
-def prepare(input_dir: str, output_dir: str, months: list[int], **kwargs):
+def prepare(
+    input_dir: str, output_dir: str, months: list[int], kaggle_id: str, **kwargs
+):
     """
     Saves feature and target arrays + dict vectorizer, given input and output data paths.
     """
+    # download data from kaggle into input_dir
+    download_dataset(kaggle_id, input_dir)
     # load data
     data = load_data(Path(input_dir), months=months, **kwargs)
     # cleanup data
@@ -155,6 +148,12 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    prepare(**vars(args), nrows=150000)
+    prepare_args = vars(args) | {
+        'kaggle_id': os.getenv(
+            'KAGGLE_DATASET_ID', 'stoney71/new-york-city-transport-statistics'
+        )
+    }
+
+    prepare(**prepare_args, nrows=150000)
 
     sys.exit(0)

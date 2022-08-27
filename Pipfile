@@ -5,10 +5,10 @@ name = "pypi"
 
 [packages]
 pandas = "*"
-scikit-learn = "*"
+scikit-learn = "==1.1.2"
 numpy = "*"
 matplotlib = "*"
-xgboost = "*"
+xgboost = "==1.6.1"
 boto3 = "*"
 mlflow = "*"
 hyperopt = "*"

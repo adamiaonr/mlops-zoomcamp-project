@@ -197,9 +197,7 @@ def select_and_register(
     fd = load_featurized_data(input_dir)
 
     # get top n performing models
-    runs = get_top_n_runs(
-        mlflow_params['mlflow_hpo_experiment'], number_top_runs
-    ).result()
+    runs = get_top_n_runs(mlflow_params['mlflow_hpo_experiment'], number_top_runs)
 
     # run top performing models on test data
     for run in runs:

@@ -12,7 +12,7 @@ xgboost = "==1.6.1"
 boto3 = "*"
 mlflow = "*"
 hyperopt = "*"
-prefect = "==2.0b6"
+prefect = "==2.2.0"
 
 [dev-packages]
 jupyter = "*"

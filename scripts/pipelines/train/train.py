@@ -3,6 +3,7 @@ import os
 import sys
 import time
 
+import matplotlib
 import mlflow
 import numpy as np
 import xgboost as xgb
@@ -14,6 +15,8 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
 
 from utils import FeaturizedData, load_featurized_data
+
+matplotlib.use('Agg')  # fix for 'NSInternalInconsistencyException' exception
 
 
 @task

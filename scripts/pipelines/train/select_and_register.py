@@ -3,11 +3,13 @@ import os
 import sys
 import time
 
+import matplotlib
 import mlflow
 import xgboost as xgb
 from hyperopt import hp, space_eval
 from hyperopt.pyll import scope
-from mlflow.entities import ViewType
+from mlflow.entities import Run, ViewType
+from mlflow.store.entities.paged_list import PagedList
 from mlflow.tracking import MlflowClient
 from prefect import flow, task
 from prefect.task_runners import SequentialTaskRunner
@@ -15,6 +17,8 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
 
 from utils import FeaturizedData, load_featurized_data
+
+matplotlib.use('Agg')  # fix for 'NSInternalInconsistencyException' exception
 
 
 @task
@@ -102,25 +106,8 @@ def train_and_log_train_random_forest_regressor(fd: FeaturizedData, params):
         mlflow.log_metric('test_rmse', test_rmse)
 
 
-TRAIN_AND_LOG_FUNC = {
-    'xgboost-regressor': train_and_log_xgboost,
-    'random-forest-regressor': train_and_log_train_random_forest_regressor,
-}
-
-
 @task
-def select_model(
-    fd: FeaturizedData,
-    number_top_runs: int,
-    mlflow_tracking_uri: str,
-    mlflow_hpo_experiment: str,
-    mlflow_select_experiment: str,
-) -> mlflow.entities.Run:
-
-    # initialize mlflow : tracking uri and experiment name
-    mlflow.set_tracking_uri(mlflow_tracking_uri)
-    mlflow.set_experiment(mlflow_select_experiment)
-
+def get_top_n_runs(mlflow_hpo_experiment: str, number_top_runs: int) -> PagedList[Run]:
     client = MlflowClient()
 
     # extract hpo experiment
@@ -134,9 +121,12 @@ def select_model(
         order_by=["metrics.rmse ASC"],
     )
 
-    # train, validate and test using parameters of top runs
-    for run in runs:
-        TRAIN_AND_LOG_FUNC[run.data.tags['model']](fd, run.data.params)
+    return runs
+
+
+@task
+def select_best_model(mlflow_select_experiment: str) -> Run:
+    client = MlflowClient()
 
     # select model with lowest test RMSE
     select_experiment = client.get_experiment_by_name(mlflow_select_experiment)
@@ -189,22 +179,34 @@ def register_model(
     return False
 
 
+TRAIN_AND_LOG_FUNC = {
+    'xgboost-regressor': train_and_log_xgboost,
+    'random-forest-regressor': train_and_log_train_random_forest_regressor,
+}
+
+
 @flow(task_runner=SequentialTaskRunner())
 def select_and_register(
     input_dir: str, number_top_runs: int, mlflow_params: dict
 ) -> bool:
+    # initialize mlflow : tracking uri and experiment name
+    mlflow.set_tracking_uri(mlflow_params['mlflow_tracking_uri'])
+    mlflow.set_experiment(mlflow_params['mlflow_select_experiment'])
 
     # load featurized data
-    featurized_data = load_featurized_data(input_dir)
+    fd = load_featurized_data(input_dir)
+
+    # get top n performing models
+    runs = get_top_n_runs(
+        mlflow_params['mlflow_hpo_experiment'], number_top_runs
+    ).result()
+
+    # run top performing models on test data
+    for run in runs:
+        TRAIN_AND_LOG_FUNC[run.data.tags['model']](fd, run.data.params)
 
     # select best candidate model
-    mlflow_run = select_model(
-        featurized_data,
-        number_top_runs,
-        mlflow_params['mlflow_tracking_uri'],
-        mlflow_params['mlflow_hpo_experiment'],
-        mlflow_params['mlflow_select_experiment'],
-    )
+    mlflow_run = select_best_model(mlflow_params['mlflow_select_experiment'])
 
     # register best candidate model model and transition to staging (if 'better' than current)
     res = register_model(

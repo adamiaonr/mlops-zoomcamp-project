@@ -1,6 +1,7 @@
 import argparse
 import os
 import time
+from pathlib import Path
 
 import matplotlib
 from prefect import flow
@@ -14,7 +15,7 @@ matplotlib.use('Agg')  # fix for 'NSInternalInconsistencyException' exception
 
 
 @flow(name='training-pipeline', task_runner=SequentialTaskRunner())
-def main(input_dir: str, output_dir: str):
+def main(input_dir: str = "data", output_dir: str = "data/featurized"):
     ctx = get_run_context()
 
     env_vars = {
@@ -34,6 +35,10 @@ def main(input_dir: str, output_dir: str):
         'dataset_sample': os.getenv('DATASET_SAMPLE', '250000'),
         'number_top_runs': os.getenv('NUMBER_TOP_RUNS', '5'),
     }
+
+    # ensure data dirs exist
+    Path(input_dir).mkdir(parents=True, exist_ok=True)
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     months = [6, 8]
     mlflow_suffix = f"{int(time.mktime(ctx.flow_run.expected_start_time.timetuple()))}"

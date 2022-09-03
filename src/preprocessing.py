@@ -1,15 +1,17 @@
-from typing import Union
 from pathlib import Path
+from typing import Union
 
 import pandas as pd
 
 
 def add_extra_columns(data: pd.DataFrame):
-    # - combine 'PublishedLineName' and 'DirectionRef' into a 
+    # - combine 'PublishedLineName' and 'DirectionRef' into a
     #   single categorical feature
     to_combine = ['PublishedLineName', 'DirectionRef']
     data[to_combine] = data[to_combine].astype(str)
-    data['BusLine_Direction'] = data['PublishedLineName'] + '_' + data['DirectionRef'].astype(str)
+    data['BusLine_Direction'] = (
+        data['PublishedLineName'] + '_' + data['DirectionRef'].astype(str)
+    )
 
     # - date of record in format 'YYYY-MM-DD'
     data['Day'] = data['RecordedAtTime'].dt.date
@@ -67,10 +69,25 @@ def fix_datetime_columns(data: pd.DataFrame):
 
 def load_data(data_dir: Union[str, Path], months: list[int], **kwargs) -> pd.DataFrame:
     data = pd.DataFrame()
-    for file in [Path(data_dir) / f"mta_17{int(month):02d}.csv" for month in months]:
+    for filepath in list(Path(data_dir).glob('mta_17*.csv*')):
+        # ignore non-requested months
+        if not any(
+            s in str(filepath) for s in [f"mta_17{int(month):02d}" for month in months]
+        ):
+            continue
+
         # ignore lines with errors with on_bad_lines='skip'
         data = pd.concat(
-            [pd.read_csv(file, index_col=False, on_bad_lines='skip', **kwargs), data]
+            [
+                pd.read_csv(
+                    filepath,
+                    index_col=False,
+                    on_bad_lines='skip',
+                    compression='infer',
+                    **kwargs,
+                ),
+                data,
+            ]
         )
 
     return data

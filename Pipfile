@@ -13,10 +13,12 @@ boto3 = "*"
 mlflow = "*"
 hyperopt = "*"
 prefect = "==2.2.0"
+s3fs = "*"
+aiohttp = "==3.8.1"
+kaggle = "*"
 
 [dev-packages]
 jupyter = "*"
-kaggle = "*"
 seaborn = "*"
 black = "*"
 autopep8 = "*"

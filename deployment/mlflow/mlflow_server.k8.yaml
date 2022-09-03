@@ -15,8 +15,8 @@ spec:
     spec:
       containers:
       - name: mlflow-deployment
-        image: mlflow:latest
-        imagePullPolicy: Never
+        image: adamiaonr/mlflow:latest
+        imagePullPolicy: "IfNotPresent"
         args:
         - --host=0.0.0.0
         - --port=5000
@@ -24,7 +24,7 @@ spec:
         - --default-artifact-root=s3://mlflow/
         env:
         - name: MLFLOW_S3_ENDPOINT_URL
-          value: http://mlflow-minio-service:9000/
+          value: http://minio.local/
         - name: AWS_ACCESS_KEY_ID
           value: "minio"
         - name: AWS_SECRET_ACCESS_KEY

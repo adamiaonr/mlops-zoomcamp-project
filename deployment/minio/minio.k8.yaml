@@ -1,28 +1,28 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: mlflow-minio
+  name: minio
 spec:
   selector:
     matchLabels:
-      app: mlflow-minio
+      app: minio
   template:
     metadata:
       labels:
-        app: mlflow-minio
+        app: minio
     spec:
       volumes:
-      - name: mlflow-pvc
+      - name: minio-pvc
         persistentVolumeClaim:
-          claimName: mlflow-pvc
+          claimName: minio-pvc
       containers:
-      - name: mlflow-minio
+      - name: minio
         image: minio/minio:latest
         args:
         - server
         - /data
         volumeMounts:
-        - name: mlflow-pvc
+        - name: minio-pvc
           mountPath: '/data'
         env:
         - name: MINIO_ACCESS_KEY
@@ -35,7 +35,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: mlflow-minio-service
+  name: minio-service
 spec:
   type: NodePort
   ports:
@@ -43,15 +43,32 @@ spec:
     targetPort: 9000
     protocol: TCP
   selector:
-    app: mlflow-minio
+    app: minio
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: mlflow-pvc
+  name: minio-pvc
 spec:
   accessModes:
     - ReadWriteMany
   resources:
     requests:
-      storage: 100Mi
+      storage: 500Mi
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: minio-service-ingress
+spec:
+  rules:
+  - host: minio.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: minio-service
+            port:
+              number: 9000

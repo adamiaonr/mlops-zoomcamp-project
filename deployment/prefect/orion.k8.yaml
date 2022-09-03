@@ -6,15 +6,22 @@ spec:
   selector:
     matchLabels:
       app: orion
-  replicas: 1  # We're using SQLite, so we should only run 1 pod
+  replicas: 1
   template:
     metadata:
       labels:
         app: orion
     spec:
+      volumes:
+      - name: orion-pvc
+        persistentVolumeClaim:
+          claimName: orion-pvc
       containers:
       - name: api
         image: prefecthq/prefect:2.2.0-python3.9
+        volumeMounts:
+        - name: orion-pvc
+          mountPath: '/root/.prefect'
         command: ["prefect", "orion", "start", "--host", "0.0.0.0", "--log-level", "WARNING"]
         imagePullPolicy: "IfNotPresent"
         ports:
@@ -32,3 +39,14 @@ spec:
       protocol: TCP
   selector:
     app: orion
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: orion-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 500Mi

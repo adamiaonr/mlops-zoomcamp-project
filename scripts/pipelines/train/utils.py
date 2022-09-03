@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+from kaggle.api.kaggle_api_extended import KaggleApi  # pylint: disable-msg=E0611
 from prefect import task
 from sklearn.feature_extraction import DictVectorizer
 
@@ -44,3 +45,12 @@ def save_featurized_data(
     dump_pickle((fd.X_train, fd.y_train), output_dir / "train.pkl")
     dump_pickle((fd.X_val, fd.y_val), output_dir / "validation.pkl")
     dump_pickle((fd.X_test, fd.y_test), output_dir / "test.pkl")
+
+
+def get_kaggle_client() -> KaggleApi:
+    # create kaggle client object and authenticate
+    # (assumes ~/.kaggle exists OR KAGGLE_USERNAME and KAGGLE_KEY env variables set)
+    client = KaggleApi()
+    client.authenticate()
+
+    return client

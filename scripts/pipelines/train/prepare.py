@@ -5,28 +5,33 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from kaggle.api.kaggle_api_extended import KaggleApi  # pylint: disable-msg=E0611
 from prefect import flow, task
 from prefect.task_runners import SequentialTaskRunner
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.model_selection import train_test_split
 
 from src import preprocessing
-from utils import FeaturizedData, save_featurized_data
+from utils import FeaturizedData, get_kaggle_client, save_featurized_data
 
 
 @task(retries=3)
-def download_dataset(kaggle_dataset_id: str, output_dir: str):
-    # do not download if files already exist
-    if not list(Path(output_dir).glob('mta_17*.csv')):
-        # create kaggle API object and authenticate (assumes ~/.kaggle exists)
-        api = KaggleApi()
-        api.authenticate()
-
-        # download dataset from kaggle
-        api.dataset_download_files(
-            kaggle_dataset_id, path=Path(output_dir), force=False, unzip=True
-        )
+def download_dataset(kaggle_dataset_id: str, output_dir: str, months: list[int] = None):
+    # if no month list is specified, download everything
+    if not months:
+        # do not download if files already exist
+        if not list(Path(output_dir).glob('mta_17*.csv*')):
+            get_kaggle_client().dataset_download_files(
+                kaggle_dataset_id, path=Path(output_dir), force=False, unzip=True
+            )
+    else:
+        for m in months:
+            filename = f"mta_17{int(m):02d}.csv"
+            get_kaggle_client().dataset_download_file(
+                kaggle_dataset_id,
+                file_name=filename,
+                path=Path(output_dir),
+                force=False,
+            )
 
 
 @task
@@ -111,7 +116,7 @@ def prepare(
     Saves feature and target arrays + dict vectorizer, given input and output data paths.
     """
     # download data from kaggle into input_dir
-    download_dataset(kaggle_id, input_dir)
+    download_dataset(kaggle_id, input_dir, months)
     # load data
     data = load_data(Path(input_dir), months=months, **kwargs)
     # cleanup data
@@ -154,6 +159,6 @@ if __name__ == '__main__':
         )
     }
 
-    prepare(**prepare_args, nrows=150000)
+    prepare(**prepare_args, nrows=250000)
 
     sys.exit(0)

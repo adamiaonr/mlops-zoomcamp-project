@@ -3,15 +3,13 @@ import os
 import sys
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 from prefect import flow, task
 from prefect.task_runners import SequentialTaskRunner
-from sklearn.feature_extraction import DictVectorizer
 from sklearn.model_selection import train_test_split
 
 from src import preprocessing
-from utils import FeaturizedData, get_kaggle_client, save_featurized_data
+from utils import get_kaggle_client
 
 
 @task(retries=3)
@@ -40,45 +38,28 @@ def load_data(input_dir: str, months: list[int], **kwargs) -> pd.DataFrame:
 
 
 @task
-def clean_data(data: pd.DataFrame):
-    # apply dataset 'cleaning' functions
+def clean_data(data: pd.DataFrame, feature_types: dict) -> pd.DataFrame:
     preprocessing.fix_datetime_columns(data)
     preprocessing.fix_scheduled_arrival_time_column(data)
-    # add extra columns for extra features
     preprocessing.add_extra_columns(data)
 
+    categorical = feature_types['categorical']
+    numerical = feature_types['numerical']
+    target = [feature_types['target']]
 
-def __featurize(
-    data: pd.DataFrame,
-    dv: DictVectorizer,
-    categorical: list[str],
-    numerical: list[str],
-    fit_dv: bool = False,
-) -> tuple[np.ndarray, DictVectorizer]:
-    feature_dicts = data[categorical + numerical].to_dict(orient='records')
+    # only keep columns of interest, drop nan
+    data = data[categorical + numerical + target].dropna().reset_index(drop=True)
+    # encode categorical columns as strings, 'stripped' of newlines and padding / trailing spaces
+    data[categorical] = data[categorical].astype(str)
+    data[categorical] = data[categorical].apply(lambda s: s.str.strip())
+    # encode numerical + target variables as int
+    data[numerical + target] = data[numerical + target].astype(int)
 
-    if fit_dv:
-        X = dv.fit_transform(feature_dicts)
-    else:
-        X = dv.transform(feature_dicts)
-
-    return X, dv
+    return data
 
 
 @task
-def featurize(data: pd.DataFrame) -> FeaturizedData:
-    """
-    Returns feature arrays and a dict vectorizer.
-    """
-    # define categorial and numerical features
-    categorical = ['BusLine_Direction', 'NextStopPointName']
-    numerical = ['TimeOfDayInSeconds', 'DayOfWeek']
-    # target variable
-    target = 'DelayAtStop'
-
-    # drop nan values in required columns
-    data = data.dropna(subset=categorical + numerical + [target]).reset_index(drop=True)
-
+def split_datasets(data: pd.DataFrame, output_dir: str):
     # split dataset into train, validation and test sets
     train_data, test_data = train_test_split(data, test_size=0.30)
     train_data, validation_data = train_test_split(train_data, test_size=0.20)
@@ -90,41 +71,33 @@ def featurize(data: pd.DataFrame) -> FeaturizedData:
         )
     )
 
-    # featurize splits
-    dv = DictVectorizer()
-    # - get dict vectorizer, train, validation and test splits
-    X_train, dv = __featurize(train_data, dv, categorical, numerical, fit_dv=True)
-    X_val, _ = __featurize(validation_data, dv, categorical, numerical, fit_dv=False)
-    X_test, _ = __featurize(test_data, dv, categorical, numerical, fit_dv=False)
-
-    return FeaturizedData(
-        dv,
-        X_train,
-        train_data[target].values,
-        X_val,
-        validation_data[target].values,
-        X_test,
-        test_data[target].values,
-    )
+    # save datasets
+    train_data.to_pickle(Path(output_dir) / 'train.pkl')
+    validation_data.to_pickle(Path(output_dir) / 'validation.pkl')
+    test_data.to_pickle(Path(output_dir) / 'test.pkl')
 
 
 @flow(task_runner=SequentialTaskRunner())
 def prepare(
-    input_dir: str, output_dir: str, months: list[int], kaggle_id: str, **kwargs
+    input_dir: str, output_dir: str, months: list[int], feature_types: dict, **kwargs
 ):
     """
-    Saves feature and target arrays + dict vectorizer, given input and output data paths.
+    Downloads data from kaggle.
+    Cleans data.
+    Saves train, validation and test datasets in .parquet format,
+    given input and output directories.
     """
     # download data from kaggle into input_dir
+    kaggle_id = os.getenv(
+        'KAGGLE_DATASET_ID', 'stoney71/new-york-city-transport-statistics'
+    )
     download_dataset(kaggle_id, input_dir, months)
     # load data
     data = load_data(Path(input_dir), months=months, **kwargs)
     # cleanup data
-    clean_data(data)
-    # get dict vectorizer and feature arrays
-    feturized_data = featurize(data)
-    # save featurized data
-    save_featurized_data(output_dir, feturized_data)
+    data = clean_data(data, feature_types)
+    # split datasets and save
+    split_datasets(data, output_dir)
 
 
 if __name__ == '__main__':
@@ -156,7 +129,12 @@ if __name__ == '__main__':
     prepare_args = vars(args) | {
         'kaggle_id': os.getenv(
             'KAGGLE_DATASET_ID', 'stoney71/new-york-city-transport-statistics'
-        )
+        ),
+        'feature_types': {
+            'categorical': ['BusLine_Direction', 'NextStopPointName'],
+            'numerical': ['TimeOfDayInSeconds', 'DayOfWeek'],
+            'target': 'DelayAtStop',
+        },
     }
 
     prepare(**prepare_args, nrows=250000)

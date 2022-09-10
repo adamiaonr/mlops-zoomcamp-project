@@ -1,0 +1,64 @@
+# Creating MLflow deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bus-delay-prediction-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bus-delay-prediction-deployment
+  template:
+    metadata:
+      labels:
+        app: bus-delay-prediction-deployment
+    spec:
+      containers:
+      - name: bus-delay-prediction-deployment
+        image: adamiaonr/bus-delay-prediction:latest
+        imagePullPolicy: "IfNotPresent"
+        env:
+        - name: MLFLOW_S3_ENDPOINT_URL
+          value: http://minio.local/
+        - name: AWS_ACCESS_KEY_ID
+          value: "minio"
+        - name: AWS_SECRET_ACCESS_KEY
+          value: "minio123"
+        - name: AWS_DEFAULT_REGION
+          value: us-west-2
+        - name: MLFLOW_TRACKING_URI
+          value: "http://mlflow-service:5000/"
+        - name: MLFLOW_MODEL_NAME
+          value: nyc-bus-delay-predictor
+        ports:
+        - name: http
+          containerPort: 9696
+          protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bus-delay-prediction-service
+spec:
+  ports:
+    - port: 9696
+      protocol: TCP
+  selector:
+    app: bus-delay-prediction-deployment
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bus-delay-prediction-ingress
+spec:
+  rules:
+  - host: bus-delay-prediction.local
+    http:
+      paths:
+      - path: /predict
+        pathType: Prefix
+        backend:
+          service:
+            name: bus-delay-prediction-service
+            port:
+              number: 9696

@@ -2,95 +2,87 @@ import argparse
 import os
 import sys
 import time
+from pathlib import Path
 
-import matplotlib
 import mlflow
 import numpy as np
+import pandas as pd
 import xgboost as xgb
 from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
 from hyperopt.pyll import scope
 from prefect import flow, task
 from prefect.task_runners import SequentialTaskRunner
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.feature_extraction import DictVectorizer
 from sklearn.metrics import mean_squared_error
-
-from utils import FeaturizedData, load_featurized_data
-
-matplotlib.use('Agg')  # fix for 'NSInternalInconsistencyException' exception
+from sklearn.pipeline import Pipeline
 
 
 @task
-def train_random_forest_regressor(fd: FeaturizedData):
-    # enable mlflow sklearn autologging
-    mlflow.sklearn.autolog()
+def load_datasets(input_dir: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Loads train and validation datasets
+    """
+    train_data = pd.read_pickle(Path(input_dir) / 'train.pkl')
+    val_data = pd.read_pickle(Path(input_dir) / 'validation.pkl')
 
-    def objective(params):
-        with mlflow.start_run():
-            mlflow.set_tag('model', 'random-forest-regressor')
-
-            rf = RandomForestRegressor(**params)
-            rf.fit(fd.X_train, fd.y_train)
-
-            # measure inference time
-            inference_time = time.time()
-            y_pred = rf.predict(fd.X_val)
-            inference_time = time.time() - inference_time
-            rmse = mean_squared_error(fd.y_val, y_pred, squared=False)
-
-            mlflow.log_metric('rmse', rmse)
-            mlflow.log_metric('inference_time', inference_time)
-
-        return {'loss': rmse, 'status': STATUS_OK}
-
-    search_space = {
-        'max_depth': scope.int(hp.quniform('max_depth', 1, 20, 1)),
-        'n_estimators': scope.int(hp.quniform('n_estimators', 10, 50, 1)),
-        'min_samples_split': scope.int(hp.quniform('min_samples_split', 2, 10, 1)),
-        'min_samples_leaf': scope.int(hp.quniform('min_samples_leaf', 1, 4, 1)),
-        'random_state': 42,
-    }
-
-    rstate = np.random.default_rng(42)  # for reproducible results
-    fmin(
-        fn=objective,
-        space=search_space,
-        algo=tpe.suggest,
-        max_evals=10,
-        trials=Trials(),
-        rstate=rstate,
-    )
+    return train_data, val_data
 
 
 @task
-def train_xgboost(fd: FeaturizedData):
-    # enable mlflow xgboost autologging
-    mlflow.xgboost.autolog()
+def prepare_features(
+    train_data: pd.DataFrame, val_data: pd.DataFrame, feature_types: dict
+):
+    """
+    Prepares features for a one-hot encoder DictVectorizer input,
+    which we use in our {one-hot encoder, model} pipelines
+    """
+    # isolate {categorical, numerical} features
+    features = feature_types['categorical'] + feature_types['numerical']
+    # train data
+    X_train = train_data[features].to_dict(orient='records')
+    y_train = train_data[feature_types['target']].values
+    # validation data
+    X_val = val_data[features].to_dict(orient='records')
+    y_val = val_data[feature_types['target']].values
 
-    # xgboost requires a conversion of input types
-    train_data = xgb.DMatrix(fd.X_train, label=fd.y_train)
-    validation_data = xgb.DMatrix(fd.X_val, label=fd.y_val)
+    return X_train, y_train, X_val, y_val
 
+
+@task
+def train_xgboost(X_train: dict, y_train: np.ndarray, X_val: dict, y_val: np.ndarray):
+    """
+    Runs hyperparameter optimization experiments on XGBoost regressor.
+    Uploads metrics, tags and artifacts to MLFlow tracking server.
+    """
     # objective function to be used by hyperopt
     def objective(params):
         with mlflow.start_run():
             mlflow.set_tag('model', 'xgboost-regressor')
+            mlflow.log_params(params)
 
-            booster = xgb.train(
-                params=params,
-                dtrain=train_data,
-                num_boost_round=100,
-                evals=[(validation_data, 'validation')],
-                early_stopping_rounds=10,
+            # create sklearn pipeline with steps:
+            # - one-hot encoder (aka dict vectorizer)
+            # - xgboost regressor
+            xgb_regressor = Pipeline(
+                [
+                    ('ohe', DictVectorizer()),
+                    ('xgboost-regressor', xgb.XGBRegressor(**params)),
+                ]
             )
 
+            # fit xgb regressor
+            xgb_regressor.fit(X_train, y_train)
             # measure inference time
             inference_time = time.time()
-            y_pred = booster.predict(validation_data)
+            y_pred = xgb_regressor.predict(X_val)
             inference_time = time.time() - inference_time
-            rmse = mean_squared_error(fd.y_val, y_pred, squared=False)
-
+            rmse = mean_squared_error(y_val, y_pred, squared=False)
+            # log rmse and inference time
             mlflow.log_metric('rmse', rmse)
-            mlflow.log_metric('inference_time', inference_time)
+            mlflow.log_metric('inference_time', inference_time / len(y_pred))
+            # log (dict vectorizer, xgboost regressor) pipeline
+            mlflow.sklearn.log_model(xgb_regressor, artifact_path='model')
 
         return {'loss': rmse, 'status': STATUS_OK}
 
@@ -115,20 +107,93 @@ def train_xgboost(fd: FeaturizedData):
     )
 
 
+@task
+def train_random_forest_regressor(
+    X_train: dict, y_train: np.ndarray, X_val: dict, y_val: np.ndarray
+):
+    """
+    Runs hyperparameter optimization experiments on RandomForestRegressor.
+    Uploads metrics, tags and artifacts to MLFlow tracking server.
+    """
+
+    def objective(params):
+        with mlflow.start_run():
+            # set model type tag
+            mlflow.set_tag('model', 'random-forest-regressor')
+            mlflow.log_params(params)
+
+            # create sklearn pipeline with steps:
+            # - one-hot encoder (aka dict vectorizer)
+            # - random forest regressor
+            rf = Pipeline(
+                [
+                    ('ohe', DictVectorizer()),
+                    ('rf-regressor', RandomForestRegressor(**params, n_jobs=-1)),
+                ]
+            )
+
+            # train RandomForestRegressor
+            rf.fit(X_train, y_train)
+
+            # measure inference time on validation data
+            inference_time = time.time()
+            y_pred = rf.predict(X_val)
+            inference_time = time.time() - inference_time
+            rmse = mean_squared_error(y_val, y_pred, squared=False)
+
+            mlflow.log_metric('rmse', rmse)
+            mlflow.log_metric('inference_time', inference_time / len(y_pred))
+            # log (dict vectorizer, rf model) pipeline
+            mlflow.sklearn.log_model(rf, artifact_path='model')
+
+        return {'loss': rmse, 'status': STATUS_OK}
+
+    search_space = {
+        'max_depth': scope.int(hp.quniform('max_depth', 1, 20, 1)),
+        'n_estimators': scope.int(hp.quniform('n_estimators', 10, 50, 1)),
+        'min_samples_split': scope.int(hp.quniform('min_samples_split', 2, 10, 1)),
+        'min_samples_leaf': scope.int(hp.quniform('min_samples_leaf', 1, 4, 1)),
+        'random_state': 42,
+    }
+
+    rstate = np.random.default_rng(42)  # for reproducible results
+    fmin(
+        fn=objective,
+        space=search_space,
+        algo=tpe.suggest,
+        max_evals=10,
+        trials=Trials(),
+        rstate=rstate,
+    )
+
+
 @flow(task_runner=SequentialTaskRunner())
-def train(input_dir: str, mlflow_tracking_uri: str, mlflow_experiment: str):
+def train(
+    input_dir: str,
+    mlflow_tracking_uri: str,
+    mlflow_experiment: str,
+    feature_types: dict,
+):
+    """
+    Runs hyperoptimization experiments in two types of models:
+        - sklearn's random forest regressor
+        - xgboost regressor
+    Logs artifacts, parameters, metrics and tags to MLFlow.
+    """
     # initialize mlflow : tracking uri and experiment name
     mlflow.set_tracking_uri(mlflow_tracking_uri)
     mlflow.set_experiment(mlflow_experiment)
 
-    # load featurized data
-    featurized_data = load_featurized_data(input_dir)
-
+    # load datasets
+    train_data, val_data = load_datasets(input_dir)
+    # prepare features
+    X_train, y_train, X_val, y_val = prepare_features(
+        train_data, val_data, feature_types
+    )
     # train and evaluate xgboost model
-    train_xgboost(featurized_data)
-
+    train_xgboost(X_train, y_train, X_val, y_val)
     # train and evaluate random forest regressor model
-    train_random_forest_regressor(featurized_data)
+    train_random_forest_regressor(X_train, y_train, X_val, y_val)
 
 
 if __name__ == '__main__':
@@ -150,6 +215,11 @@ if __name__ == '__main__':
         'mlflow_experiment': os.getenv(
             'MLFLOW_HPO_EXPERIMENT_NAME', 'nyc-bus-delay-predictor-hpo'
         ),
+        'feature_types': {
+            'categorical': ['BusLine_Direction', 'NextStopPointName'],
+            'numerical': ['TimeOfDayInSeconds', 'DayOfWeek'],
+            'target': 'DelayAtStop',
+        },
     }
 
     # start training

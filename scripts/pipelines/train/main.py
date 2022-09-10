@@ -3,7 +3,6 @@ import os
 import time
 from pathlib import Path
 
-import matplotlib
 from prefect import flow
 from prefect.context import get_run_context
 from prefect.task_runners import SequentialTaskRunner
@@ -11,17 +10,12 @@ from prepare import prepare
 from select_and_register import select_and_register
 from train import train
 
-matplotlib.use('Agg')  # fix for 'NSInternalInconsistencyException' exception
-
 
 @flow(name='training-pipeline', task_runner=SequentialTaskRunner())
 def main(input_dir: str = "data", output_dir: str = "data/featurized"):
     ctx = get_run_context()
 
     env_vars = {
-        'kaggle_id': os.getenv(
-            'KAGGLE_DATASET_ID', 'stoney71/new-york-city-transport-statistics'
-        ),
         'mlflow_tracking_uri': os.getenv(
             'MLFLOW_TRACKING_URI', 'http://127.0.0.1:5000'
         ),
@@ -36,6 +30,12 @@ def main(input_dir: str = "data", output_dir: str = "data/featurized"):
         'number_top_runs': os.getenv('NUMBER_TOP_RUNS', '5'),
     }
 
+    feature_types = {
+        'categorical': ['BusLine_Direction', 'NextStopPointName'],
+        'numerical': ['TimeOfDayInSeconds', 'DayOfWeek'],
+        'target': 'DelayAtStop',
+    }
+
     # ensure data dirs exist
     Path(input_dir).mkdir(parents=True, exist_ok=True)
     Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -48,7 +48,7 @@ def main(input_dir: str = "data", output_dir: str = "data/featurized"):
         input_dir,
         output_dir,
         months,
-        env_vars['kaggle_id'],
+        feature_types,
         nrows=int(env_vars['dataset_sample']),
     )
 
@@ -57,6 +57,7 @@ def main(input_dir: str = "data", output_dir: str = "data/featurized"):
         output_dir,
         env_vars['mlflow_tracking_uri'],
         f"{env_vars['mlflow_hpo_experiment']}-{mlflow_suffix}",
+        feature_types,
     )
 
     # select best model and save it in registry
@@ -69,6 +70,7 @@ def main(input_dir: str = "data", output_dir: str = "data/featurized"):
             'mlflow_select_experiment': f"{env_vars['mlflow_select_experiment']}-{mlflow_suffix}",
             'mlflow_model_name': env_vars['mlflow_model_name'],
         },
+        feature_types,
     )
 
 

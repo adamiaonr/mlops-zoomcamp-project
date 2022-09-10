@@ -42,6 +42,8 @@ def clean_data(data: pd.DataFrame, feature_types: dict) -> pd.DataFrame:
     preprocessing.fix_datetime_columns(data)
     preprocessing.fix_scheduled_arrival_time_column(data)
     preprocessing.add_extra_columns(data)
+    # remove data points with abnormal delay durations
+    data = preprocessing.remove_outliers(data, {'DelayAtStop': [-500, 2500]})
 
     categorical = feature_types['categorical']
     numerical = feature_types['numerical']

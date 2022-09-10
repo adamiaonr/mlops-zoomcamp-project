@@ -67,6 +67,13 @@ def fix_datetime_columns(data: pd.DataFrame):
     ].apply(pd.to_datetime, infer_datetime_format=True)
 
 
+def remove_outliers(data: pd.DataFrame, limits: dict) -> pd.DataFrame:
+    for k, v in limits.items():
+        data = data[(data[k] >= v[0]) & (data[k] <= v[1])]
+
+    return data.reset_index(drop=True)
+
+
 def load_data(data_dir: Union[str, Path], months: list[int], **kwargs) -> pd.DataFrame:
     data = pd.DataFrame()
     for filepath in list(Path(data_dir).glob('mta_17*.csv*')):

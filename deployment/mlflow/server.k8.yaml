@@ -15,8 +15,8 @@ spec:
     spec:
       containers:
       - name: mlflow-deployment
-        image: adamiaonr/mlflow:latest
-        imagePullPolicy: "IfNotPresent"
+        image: mlflow:latest
+        imagePullPolicy: "Never"
         args:
         - --host=0.0.0.0
         - --port=5000

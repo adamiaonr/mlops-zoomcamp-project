@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: evidently-configs
+data:
+  config.yaml: |-
+    datasets:
+      nyc_bus:
+        column_mappings:
+          categorical_features:
+            - 'PublishedLineName'
+            - 'DirectionRef'
+            - 'NextStopPointName'
+          numerical_features:
+            - 'TimeOfDayInSeconds'
+            - 'DayOfWeek'
+        data_format:
+          header: true
+          separator: ','
+        monitors:
+          - data_drift
+        reference_file: ./datasets/train.pkl
+    service:
+      calculation_period_sec: 2
+      min_reference_size: 30
+      moving_reference: false
+      datasets_path: datasets
+      use_reference: true
+      window_size: 5

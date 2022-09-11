@@ -10,6 +10,7 @@ flask = "*"
 mlflow = "*"
 boto3 = "*"
 gunicorn = "*"
+pymongo = "*"
 
 [dev-packages]
 requests = "*"

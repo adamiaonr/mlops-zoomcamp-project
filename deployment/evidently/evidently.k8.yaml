@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: evidently-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: evidently-deployment
+  template:
+    metadata:
+      labels:
+        app: evidently-deployment
+    spec:
+      containers:
+      - name: evidently-deployment
+        image: evidently_service:latest
+        imagePullPolicy: "Never"
+        ports:
+        - name: http
+          containerPort: 8085
+          protocol: TCP
+        volumeMounts:
+          - name: evidently-config-volume
+            mountPath: /app/config.yaml
+            subPath: config.yaml
+      volumes:
+        - name: evidently-config-volume
+          configMap:
+            defaultMode: 420
+            name: evidently-config-map
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: evidently-service
+spec:
+  ports:
+    - port: 8085
+      protocol: TCP
+  selector:
+    app: evidently-deployment

@@ -89,7 +89,7 @@ def load_data(data_dir: Union[str, Path], months: list[int], **kwargs) -> pd.Dat
                 pd.read_csv(
                     filepath,
                     index_col=False,
-                    on_bad_lines='skip',
+                    error_bad_lines=False,
                     compression='infer',
                     **kwargs,
                 ),

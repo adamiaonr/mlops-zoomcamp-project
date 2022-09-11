@@ -63,8 +63,10 @@ def clean_data(data: pd.DataFrame, feature_types: dict) -> pd.DataFrame:
 @task
 def split_datasets(data: pd.DataFrame, output_dir: str):
     # split dataset into train, validation and test sets
-    train_data, test_data = train_test_split(data, test_size=0.30)
-    train_data, validation_data = train_test_split(train_data, test_size=0.20)
+    train_data, test_data = train_test_split(data, test_size=0.30, shuffle=False)
+    train_data, validation_data = train_test_split(
+        train_data, test_size=0.20, shuffle=False
+    )
 
     print(
         (
@@ -120,18 +122,15 @@ if __name__ == '__main__':
         nargs='+',
         help=(
             "NYC bus dataset months to be used, separated by whitspaces, "
-            "e.g. '--months 6 8' (default: [6, 8])"
+            "e.g. '--months 6 8' (default: [6])"
         ),
-        default=['6', '8'],
+        default=['6'],
         required=False,
     )
 
     args = parser.parse_args()
 
     prepare_args = vars(args) | {
-        'kaggle_id': os.getenv(
-            'KAGGLE_DATASET_ID', 'stoney71/new-york-city-transport-statistics'
-        ),
         'feature_types': {
             'categorical': ['BusLine_Direction', 'NextStopPointName'],
             'numerical': ['TimeOfDayInSeconds', 'DayOfWeek'],
@@ -139,6 +138,6 @@ if __name__ == '__main__':
         },
     }
 
-    prepare(**prepare_args, nrows=250000)
+    prepare(**prepare_args, nrows=100000)
 
     sys.exit(0)

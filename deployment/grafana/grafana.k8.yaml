@@ -20,10 +20,16 @@ spec:
         - name: grafana
           containerPort: 3000
         volumeMounts:
-          - mountPath: /var/lib/grafana
-            name: grafana-storage
-          - mountPath: /etc/grafana/provisioning/datasources
-            name: grafana-datasources
+          - name: grafana-storage
+            mountPath: /var/lib/grafana
+          - name: grafana-datasources
+            mountPath: /etc/grafana/provisioning/datasources/
+            readOnly: true
+          - name: grafana-dashboards
+            mountPath: /etc/grafana/provisioning/dashboards/
+            readOnly: true
+          - name: grafana-data-drift-dashboard
+            mountPath: /opt/grafana/dashboards/
             readOnly: false
       volumes:
         - name: grafana-storage
@@ -32,6 +38,14 @@ spec:
           configMap:
               defaultMode: 420
               name: grafana-datasources
+        - name: grafana-dashboards
+          configMap:
+              defaultMode: 420
+              name: grafana-dashboards
+        - name: grafana-data-drift-dashboard
+          configMap:
+              defaultMode: 420
+              name: grafana-data-drift-dashboard
 ---
 apiVersion: v1
 kind: Service

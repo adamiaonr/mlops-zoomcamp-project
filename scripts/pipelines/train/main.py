@@ -26,7 +26,7 @@ def main(input_dir: str = "data", output_dir: str = "data/featurized"):
             'MLFLOW_SELECT_EXPERIMENT_NAME', 'nyc-bus-delay-predictor-select'
         ),
         'mlflow_model_name': os.getenv('MLFLOW_MODEL_NAME', 'nyc-bus-delay-predictor'),
-        'dataset_sample': os.getenv('DATASET_SAMPLE', '250000'),
+        'dataset_sample': os.getenv('DATASET_SAMPLE', '100000'),
         'number_top_runs': os.getenv('NUMBER_TOP_RUNS', '5'),
     }
 
@@ -40,7 +40,7 @@ def main(input_dir: str = "data", output_dir: str = "data/featurized"):
     Path(input_dir).mkdir(parents=True, exist_ok=True)
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-    months = [6, 8]
+    months = [6]
     mlflow_suffix = f"{int(time.mktime(ctx.flow_run.expected_start_time.timetuple()))}"
 
     # download and pre-process dataset

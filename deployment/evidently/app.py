@@ -34,7 +34,6 @@ from evidently.model_monitoring import (
 from evidently.pipeline.column_mapping import ColumnMapping
 from evidently.runner.loader import DataLoader, DataOptions
 from flask import Flask
-from pyarrow import parquet as pq
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
 
 app = Flask(__name__)
@@ -214,16 +213,8 @@ def configure_service():
         logging.info(
             f"Load reference data for dataset {dataset_name} from {reference_file}"
         )
-        reference_data = pq.read_table(reference_file).to_pandas()
-        reference_data['duration'] = (
-            reference_data.lpep_dropoff_datetime - reference_data.lpep_pickup_datetime
-        )
-        reference_data.duration = reference_data.duration.apply(
-            lambda td: td.total_seconds() / 60
-        )
-        reference_data = reference_data[
-            (reference_data.duration >= 1) & (reference_data.duration <= 60)
-        ]
+        reference_data = pd.read_pickle(reference_file)
+
         datasets[dataset_name] = LoadedDataset(
             name=dataset_name,
             references=reference_data,

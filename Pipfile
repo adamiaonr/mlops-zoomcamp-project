@@ -4,7 +4,7 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-pandas = "*"
+pandas = "==1.2.0"
 scikit-learn = "==1.1.2"
 numpy = "*"
 xgboost = "==1.6.1"

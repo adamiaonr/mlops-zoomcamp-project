@@ -2,46 +2,46 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app: mongo
-  name: mongo
+    app: mongodb
+  name: mongodb
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: mongo
+      app: mongodb
   template:
     metadata:
       labels:
-        app: mongo
+        app: mongodb
     spec:
       volumes:
       - name: "mongodb-data-dir"
         persistentVolumeClaim:
           claimName: "mongodb-pvc"
       containers:
-      - name: mongo
+      - name: mongodb
         image: mongo
         args: ["--dbpath","/data/db"]
         volumeMounts:
         - name: "mongodb-data-dir"
           mountPath: "/data/db"
-        env:
-        - name: MONGO_INITDB_ROOT_USERNAME
-          valueFrom:
-            secretKeyRef:
-              name: mongo-creds
-              key: username
-        - name: MONGO_INITDB_ROOT_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: mongo-creds
-              key: password
+        # env:
+        # - name: MONGO_INITDB_ROOT_USERNAME
+        #   valueFrom:
+        #     secretKeyRef:
+        #       name: mongodb-creds
+        #       key: username
+        # - name: MONGO_INITDB_ROOT_PASSWORD
+        #   valueFrom:
+        #     secretKeyRef:
+        #       name: mongodb-creds
+        #       key: password
 ---
 apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app: mongo
+    app: mongodb
   name: mongodb-service
 spec:
   type: NodePort
@@ -50,7 +50,7 @@ spec:
     protocol: TCP
     targetPort: 27017
   selector:
-    app: mongo
+    app: mongodb
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -62,3 +62,12 @@ spec:
   resources:
     requests:
       storage: 500Mi
+---
+apiVersion: v1
+kind: Secret
+data:
+  username: YWRtaW51c2Vy
+  password: cGFzc3dvcmQxMjM=
+metadata:
+  creationTimestamp: null
+  name: mongodb-creds

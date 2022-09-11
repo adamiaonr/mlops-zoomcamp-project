@@ -1,15 +1,14 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: evidently-configs
+  name: evidently-config-map
 data:
   config.yaml: |-
     datasets:
       nyc_bus:
-        column_mappings:
+        column_mapping:
           categorical_features:
-            - 'PublishedLineName'
-            - 'DirectionRef'
+            - 'BusLine_Direction'
             - 'NextStopPointName'
           numerical_features:
             - 'TimeOfDayInSeconds'

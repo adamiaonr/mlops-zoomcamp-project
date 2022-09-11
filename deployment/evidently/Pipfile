@@ -6,7 +6,7 @@ name = "pypi"
 [packages]
 dataclasses = "==0.6"
 flask = "~=2.0.1"
-pandas = "~=1.1.5"
+pandas = "==1.2.0"
 werkzeug = "~=2.0.1"
 requests = "~=2.26.0"
 prometheus-client = "~=0.11.0"

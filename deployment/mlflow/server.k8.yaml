@@ -21,14 +21,14 @@ spec:
         - --host=0.0.0.0
         - --port=5000
         - --backend-store-uri=postgresql://mlflow_user:mlflow_pwd@mlflow-postgres-service:5432/mlflow_db
-        - --default-artifact-root=s3://mlflow/
+        - --default-artifact-root=s3://$MLFLOW_S3_BUCKET_NAME/
         env:
         - name: MLFLOW_S3_ENDPOINT_URL
           value: http://minio.local/
         - name: AWS_ACCESS_KEY_ID
-          value: "minio"
+          value: $AWS_ACCESS_KEY_ID
         - name: AWS_SECRET_ACCESS_KEY
-          value: "minio123"
+          value: $AWS_SECRET_ACCESS_KEY
         - name: AWS_DEFAULT_REGION
           value: us-west-2
         ports:

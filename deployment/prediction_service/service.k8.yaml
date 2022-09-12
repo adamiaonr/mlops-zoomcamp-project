@@ -22,11 +22,11 @@ spec:
         - name: MLFLOW_TRACKING_URI
           value: "http://mlflow-service:5000/"
         - name: MLFLOW_MODEL_NAME
-          value: nyc-bus-delay-predictor
+          value: $MLFLOW_MODEL_NAME
         - name: AWS_ACCESS_KEY_ID
-          value: "minio"
+          value: $AWS_ACCESS_KEY_ID
         - name: AWS_SECRET_ACCESS_KEY
-          value: "minio123"
+          value: $AWS_SECRET_ACCESS_KEY
         - name: AWS_DEFAULT_REGION
           value: us-west-2
         - name: MONGO_DB_ADDRESS

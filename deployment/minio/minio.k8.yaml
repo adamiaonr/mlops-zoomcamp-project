@@ -29,9 +29,9 @@ spec:
           mountPath: '/data'
         env:
         - name: MINIO_ACCESS_KEY
-          value: "minio"
+          value: $AWS_ACCESS_KEY_ID
         - name: MINIO_SECRET_KEY
-          value: "minio123"
+          value: $AWS_SECRET_ACCESS_KEY
         ports:
         - containerPort: 9000
 ---

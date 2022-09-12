@@ -1,0 +1,97 @@
+###
+### A complete description of a Prefect Deployment for flow 'training-pipeline'
+###
+name: training-pipeline
+description: null
+version: 311e3686270fb86176315253601533a6
+# The work queue that will handle this deployment's runs
+work_queue_name: kubernetes
+tags: []
+parameters: {}
+schedule: null
+infra_overrides: {}
+infrastructure:
+  type: kubernetes-job
+  env: {}
+  labels: {}
+  name: null
+  command:
+  - python
+  - -m
+  - prefect.engine
+  image: prefect-kubernetes:latest
+  namespace: default
+  service_account_name: null
+  image_pull_policy: "Never"
+  cluster_config: null
+  job:
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      labels: {}
+    spec:
+      template:
+        spec:
+          parallelism: 1
+          completions: 1
+          restartPolicy: Never
+          containers:
+          - name: prefect-job
+            env:
+            - name: AWS_ACCESS_KEY_ID
+              value: $AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              value: $AWS_SECRET_ACCESS_KEY
+            - name: AWS_DEFAULT_REGION
+              value: us-west-2
+            - name: KAGGLE_USERNAME
+              value: $KAGGLE_USERNAME
+            - name: KAGGLE_KEY
+              value: $KAGGLE_KEY
+            - name: KAGGLE_DATASET_ID
+              value: $KAGGLE_DATASET_ID
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow-service:5000/"
+            - name: MLFLOW_HPO_EXPERIMENT_NAME
+              value: $MLFLOW_HPO_EXPERIMENT_NAME
+            - name: MLFLOW_SELECT_EXPERIMENT_NAME
+              value: $MLFLOW_SELECT_EXPERIMENT_NAME
+            - name: MLFLOW_MODEL_NAME
+              value: $MLFLOW_MODEL_NAME
+            - name: MLFLOW_S3_ENDPOINT_URL
+              value: "http://minio-service:9000/"
+  customizations: []
+  job_watch_timeout_seconds: 5
+  pod_watch_timeout_seconds: 60
+  stream_output: true
+
+###
+### DO NOT EDIT BELOW THIS LINE
+###
+flow_name: training-pipeline
+manifest_path: null
+storage:
+  basepath: s3://$PREFECT_S3_BUCKET_NAME/
+  settings:
+    client_kwargs:
+      endpoint_url: http://minio.local
+  _is_anonymous: true
+  _block_document_name: anonymous-5cf494ae-73ec-4de4-9694-41bab921982f
+  _block_document_id: 88ebcef0-0a49-41f4-98d8-682593cefd13
+  _block_type_slug: remote-file-system
+path: null
+entrypoint: scripts/pipelines/train/main.py:main
+parameter_openapi_schema:
+  title: Parameters
+  type: object
+  properties:
+    input_dir:
+      title: input_dir
+      type: string
+    output_dir:
+      title: output_dir
+      type: string
+  required:
+  - input_dir
+  - output_dir
+  definitions: null

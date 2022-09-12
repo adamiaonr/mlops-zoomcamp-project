@@ -1,0 +1,21 @@
+services:
+  mlflow:
+    image: mlflow
+    build:
+      context: deployment/mlflow
+      dockerfile: Dockerfile
+  evidently:
+    image: evidently_service
+    build:
+      context: deployment/evidently
+      dockerfile: Dockerfile
+  prefect:
+    image: prefect-kubernetes
+    build:
+      context: deployment/prefect
+      dockerfile: Dockerfile
+  prediction_service:
+    image: bus-delay-prediction
+    build:
+      context: deployment/prediction_service
+      dockerfile: Dockerfile

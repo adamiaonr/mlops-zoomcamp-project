@@ -3,8 +3,6 @@ A end-to-end(ish) ML pipeline for a simple bus delay prediction service, which c
 
 Final project for [MLOps Zoomcamp course, 2022 edition](https://github.com/DataTalksClub/mlops-zoomcamp).
 
-## Contents
-
 ## Motivation
 
 The core idea of the project uses ML to provide an estimate of the delay of a New York City bus (NYC), given features such as (a) the bus line / direction of the bus; (b) a station where to catch the bus; (c) the time of the day; (d) day of the week.
@@ -37,8 +35,28 @@ In order to pass it to a format like `2022-08-01 00:05:00` we apply the function
 
 ### Overview
 
-Even though this setup includes all the basic components taught during the course, this setup is not appropriately automated, most importantly lacking proper deployment on the cloud.
-Nevertheless, it can be experimented with in your local PC, and can be useful as an initial reference for those that which to deploy an orchestrated end-to-end ML pipeline in a Kubernetes cluster.
+* **Cloud:** not developed in the Cloud, but project is deployed to Kubernetes (tested locally on a Minikube cluster)
+* **Experiment tracking & model registry:** MLFlow for experiment tracking, with model registering, using a dedicated [MINIO](https://min.io/) S3-compatible storage deployment as artifact store
+* **Workflow orchestration:** Basic orchestration of an ML training pipeline workflow, i.e.:
+  1. Download of data directly from Kaggle
+  2. Running hyper-parameter tuning experiments with MLFlow
+  3. selection and registration of best model.
+
+Used a Prefect Kubernetes deployment with (a) a Prefect Orion server; and (b) a Prefect Agent that starts a Kubernetes pod to run the workflow.
+
+* **Model deployment:** Model is deployed in a 'web-service' and 'containerized' fashion. Accompanied with:
+  1. Dockerfile and Docker Compose files for image building
+  2. Kubernetes `.yaml` files for deployment in a Kubernetes cluster
+  3. Commands for deployment in a Kubernetes cluster in a `Makefile`
+
+* **Model monitoring:** Basic model monitoring deployment in Kubernetes that shows data drift in a Grafana dashboard, with backend composed by MongoDB, Prometheus and EvidentlyAI services.
+* **Reproducibility:** `Makefile` and instructions for deployment in a local Minikube Kubernetes cluster.
+
+* **Best practices:**
+  1. Unit tests
+  2. Linter + code formatters used
+  3. Makefile
+  4. Pre-commit hooks
 
 ### Requirements
 
@@ -177,10 +195,17 @@ make deploy_service
 
 ```
 $ cd <repo-base-dir>
-$ pipenv run deployment/prediction_service/test.py
+$ pipenv run python deployment/prediction_service/test.py
 ```
 
-You should get an output as follows, indicating that the service is running.
+You should get an output as follows, indicating that the service is running:
+
+```
+$ pipenv run python deployment/prediction_service/test.py
+
+QUERY: {'PublishedLineName': 'S40', 'DirectionRef': 0, 'NextStopPointName': 'SOUTH AV/ARLINGTON PL', 'TimeOfDayInSeconds': 76528, 'DayOfWeek': 4}
+RESPONSE: {'bus delay': 185.15206909179688, 'model_version': '51b72630cb2a4ac09432900a8803a946'}
+```
 
 4. To access the data drift dashboards in Grafana, run the following command to port-forward port 3000 on a separate shell:
 

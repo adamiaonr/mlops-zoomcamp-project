@@ -48,16 +48,19 @@ deploy_train: deploy_storage build_custom_images
 	kubectl apply -f deployment/prefect/agent.k8.yaml
 	sleep 5
 
-deploy_service: build_custom_images deploy_train
+deploy_service:
 	cat deployment/prediction_service/*.yaml | envsubst | kubectl apply -f -
 	sleep 5
 	cat deployment/mongodb/*.yaml | envsubst | kubectl apply -f -
 	sleep 5
-	cat deployment/prometheus/*.yaml | envsubst | kubectl apply -f -
+	cat deployment/prometheus/config_map.k8.yaml | envsubst | kubectl apply -f -
+	cat deployment/prometheus/prometheus.k8.yaml | envsubst | kubectl apply -f -
 	sleep 5
-	cat deployment/grafana/*.yaml | envsubst | kubectl apply -f -
+	cat deployment/grafana/config_map.k8.yaml | envsubst | kubectl apply -f -
+	cat deployment/grafana/grafana.k8.yaml | envsubst | kubectl apply -f -
 	sleep 5
-	cat deployment/evidently/*.yaml | envsubst | kubectl apply -f -
+	cat deployment/evidently/config_map.k8.yaml | envsubst | kubectl apply -f -
+	cat deployment/evidently/evidently.k8.yaml | envsubst | kubectl apply -f -
 	sleep 5
 
 destroy: minikube_start

@@ -1,4 +1,4 @@
-# mlops-zoomcamp-project : NYC Bus Delay Prediction Service
+# NYC Bus Delay Prediction Service
 A end-to-end(ish) ML pipeline for a simple bus delay prediction service, which can be deployed in a Kubernetes cluster.
 
 Final project for [MLOps Zoomcamp course, 2022 edition](https://github.com/DataTalksClub/mlops-zoomcamp).

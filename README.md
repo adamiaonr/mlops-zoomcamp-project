@@ -72,6 +72,7 @@ To run this project, you must install the following:
 ### Usage
 
 #### Setup environment
+---
 
 1. Fill in `.env` with any missing variable values (e.g., `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY`)
 
@@ -90,6 +91,7 @@ $ set -a; source .env;
 ```
 
 #### Deploy ML training pipeline
+---
 
 1. Start Minikube, build custom docker images and deploy all necessary 'pods' for the ML training pipeline in a local Kubernetes cluster:
 
@@ -135,6 +137,7 @@ minio-service-ingress   nginx   minio.local   192.168.59.100   80      5m15s
 ```
 
 #### Configure Prefect deployment
+---
 
 We should now be ready to build our own Prefect deployment, and run it.
 To do so, we need to perform a few of manual steps:
@@ -191,6 +194,7 @@ To run it, you can select 'Run' in the top-right corner, and choose 'Now with de
 You can now use the Prefect UI to monitor the execution of the Prefect flow.
 
 #### Prediction service deployment
+---
 
 A the end of the ML training pipeline, we should now have a model staged to 'Production'.
 We can now deploy the NYC bus delay prediction service!

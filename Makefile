@@ -1,8 +1,8 @@
 .PHONY: init test_unit format lint minikube_start minikube_stop build_custom_images deploy_storage deploy_train deploy_service
 
 init:
-	pipenv install --dev
-	pre-commit install
+	pipenv install
+	pipenv run pre-commit install
 
 test_unit:
 	python -m unittest discover -s tests/unit -v
@@ -17,7 +17,9 @@ lint:
 minikube_start:
 	@if [ -z "$$(ps aux | grep minikube | grep -v grep)" ]; then \
 		minikube start; \
-		sleep 20; \
+		sleep 60; \
+		minikube addons enable ingress; \
+		sleep 60; \
 	fi
 	@eval $$(minikube -p minikube docker-env)
 
@@ -47,6 +49,7 @@ deploy_train: deploy_storage build_custom_images
 	sleep 5
 	kubectl apply -f deployment/prefect/agent.k8.yaml
 	sleep 5
+	prefect config set PREFECT_ORION_UI_API_URL=${PREFECT_ORION_UI_API_URL}
 
 deploy_service:
 	cat deployment/prediction_service/*.yaml | envsubst | kubectl apply -f -

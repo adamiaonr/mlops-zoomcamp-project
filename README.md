@@ -50,6 +50,7 @@ Used a Prefect Kubernetes deployment with (a) a Prefect Orion server; and (b) a 
   3. Commands for deployment in a Kubernetes cluster in a `Makefile`
 
 * **Model monitoring:** Basic model monitoring deployment in Kubernetes that shows data drift in a Grafana dashboard, with backend composed by MongoDB, Prometheus and EvidentlyAI services.
+
 * **Reproducibility:** `Makefile` and instructions for deployment in a local Minikube Kubernetes cluster.
 
 * **Best practices:**
@@ -70,22 +71,39 @@ To run this project, you must install the following:
 
 ### Usage
 
-#### Deploy ML training pipeline
+#### Setup environment
 
-1. Open a terminal window and run the following to setup the environment:
+1. Fill in `.env` with any missing variable values (e.g., `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY`)
+
+2. Install dependencies and activate Python virtual environment
+
+```
+$ make init
+$ pipenv shell
+```
+
+3. Open a terminal window and run the following to setup the environment variables:
 
 ```
 $ cd <repo-base-dir>
 $ set -a; source .env;
 ```
 
-2. Start Minikube, build custom docker images and deploy all necessary containers for the ML training pipeline:
+#### Deploy ML training pipeline
+
+1. Start Minikube, build custom docker images and deploy all necessary 'pods' for the ML training pipeline in a local Kubernetes cluster:
 
 ```
 $ make deploy_train
 ```
 
-3. Verify that all 'pods' are working by running `kubectl get pods`.
+In this case, the 'local Kubernetes cluster' is managed by Minikube.
+The instructions to deploy each 'pod' are enclosed in special `.yaml` files, within the [`deployment/` directory](https://github.com/adamiaonr/mlops-zoomcamp-project/tree/master/deployment).
+You can also inspect the `deploy_train` target in the `Makefile` to understand the `kubectl` commands that trigger the deployment on the Kubernetes cluster.
+
+**NOTE:** if the process fails, it may be necessary to re-run `make deploy_train` several times until it works.
+
+2. Verify that all 'pods' are working by running `kubectl get pods`.
 The `STATUS` fields should be set to `Running`, e.g:
 
 ```
@@ -102,7 +120,7 @@ orion-75c87d759d-jcnmf               1/1     Running   0             11m
 prefect-agent-59d9f986b4-mjsdj       1/1     Running   1 (11m ago)   11m
 ```
 
-4. At this stage, it is helpful to add the following entries to your `/etc/hosts` file, so that your PC can directly access Kubernetes services without port-forwarding for some of the services:
+3. At this stage, it is helpful to add the following entries to your `/etc/hosts` file, so that your PC can directly access Kubernetes services without port-forwarding for some of the services:
 
 ```
 <kubernetes-ingress-IP>  minio.local bus-delay-prediction.local

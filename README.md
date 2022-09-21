@@ -35,6 +35,8 @@ In order to pass it to a format like `2022-08-01 00:05:00` we apply the function
 
 ### Overview
 
+![Project diagram](img/project-diagram.png)
+
 * **Cloud:** not developed in the Cloud, but project is deployed to Kubernetes (tested locally on a Minikube cluster)
 * **Experiment tracking & model registry:** MLFlow for experiment tracking, with model registering, using a dedicated [MINIO](https://min.io/) S3-compatible storage deployment as artifact store
 * **Workflow orchestration:** Basic orchestration of an ML training pipeline workflow, i.e.:
